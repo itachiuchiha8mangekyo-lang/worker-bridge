@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worker Bridge - Connecting Workers and Employers</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .notification-badge {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .tab-active {
+            border-bottom: 3px solid #2563eb;
+            color: #2563eb;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-green-50 min-h-screen">
+    
+    <!-- Language Selection Modal -->
+    <div id="languageModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4 slide-in">
+            <h2 class="text-3xl font-bold text-center mb-6 text-blue-600">Worker Bridge</h2>
+            <p class="text-center mb-6 text-gray-600">Select Language / భాష ఎంచుకోండి</p>
+            <div class="space-y-3">
+                <button onclick="selectLanguage('en')" class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition text-lg font-semibold">
+                    English
+                </button>
+                <button onclick="selectLanguage('te')" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition text-lg font-semibold">
+                    తెలుగు (Telugu)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Bar -->
+    <nav id="navbar" class="hidden bg-white shadow-lg sticky top-0 z-30">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+                <span class="text-2xl font-bold text-blue-600">Worker Bridge</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button onclick="toggleLanguage()" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition">
+                    <span id="langToggleBtn">తెలుగు</span>
+                </button>
+                <div id="notificationIcon" class="relative hidden">
+                    <button onclick="showNotifications()" class="relative">
+                        <svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                        </svg>
+                        <span id="notificationBadge" class="hidden absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center notification-badge">0</span>
+                    </button>
+                </div>
+                <span id="userNameDisplay" class="text-gray-700 font-semibold"></span>
+                <button onclick="logout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition" id="logoutBtn">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Welcome Screen -->
+    <div id="welcomeScreen" class="hidden min-h-screen flex items-center justify-center p-4">
+        <div class="max-w-4xl w-full bg-white rounded-xl shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-600 to-green-600 text-white p-8 text-center">
+                <h1 class="text-4xl font-bold mb-2" id="welcomeTitle">Welcome to Worker Bridge</h1>
+                <p class="text-xl" id="welcomeSubtitle">Connecting Workers, Agents, and Employers</p>
+            </div>
+            <div class="p-8">
+                <h2 class="text-2xl font-bold text-center mb-6 text-gray-800" id="selectUserType">Select User Type</h2>
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div class="border-2 border-blue-200 rounded-lg p-6 hover:border-blue-500 transition cursor-pointer hover:shadow-lg" onclick="showAuthModal('customer')">
+                        <div class="text-center">
+                            <svg class="w-16 h-16 mx-auto mb-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                            <h3 class="text-xl font-bold mb-2" id="customerLabel">Customer</h3>
+                            <p class="text-gray-600 text-sm" id="customerDesc">Need workers for your project</p>
+                        </div>
+                    </div>
+                    <div class="border-2 border-green-200 rounded-lg p-6 hover:border-green-500 transition cursor-pointer hover:shadow-lg" onclick="showAuthModal('agent')">
+                        <div class="text-center">
+                            <svg class="w-16 h-16 mx-auto mb-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                            <h3 class="text-xl font-bold mb-2" id="agentLabel">Agent</h3>
+                            <p class="text-gray-600 text-sm" id="agentDesc">Manage workers in your area</p>
+                        </div>
+                    </div>
+                    <div class="border-2 border-purple-200 rounded-lg p-6 hover:border-purple-500 transition cursor-pointer hover:shadow-lg" onclick="showAuthModal('worker')">
+                        <div class="text-center">
+                            <svg class="w-16 h-16 mx-auto mb-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                            </svg>
+                            <h3 class="text-xl font-bold mb-2" id="workerLabel">Worker</h3>
+                            <p class="text-gray-600 text-sm" id="workerDesc">Find work opportunities</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="authModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-8 max-w-md w-full slide-in">
+            <h2 class="text-2xl font-bold mb-6 text-center" id="authTitle">Sign In</h2>
+            <div class="mb-4 flex space-x-2">
+                <button onclick="switchAuthMode('signin')" id="signinTab" class="flex-1 py-2 rounded-lg bg-blue-600 text-white font-semibold">Sign In</button>
+                <button onclick="switchAuthMode('signup')" id="signupTab" class="flex-1 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold">Sign Up</button>
+            </div>
+            <form id="authForm" onsubmit="handleAuth(event)">
+                <div class="space-y-4">
+                    <div id="nameField" class="hidden">
+                        <label class="block text-gray-700 mb-2" id="nameLabel">Full Name</label>
+                        <input type="text" id="fullName" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    <div id="phoneField">
+                        <label class="block text-gray-700 mb-2" id="phoneLabel">Phone Number</label>
+                        <input type="tel" id="phoneNumber" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                    </div>
+                    <div id="passwordField">
+                        <label class="block text-gray-700 mb-2" id="passwordLabel">Password</label>
+                        <input type="password" id="password" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                    </div>
+                    <div id="villageField" class="hidden">
+                        <label class="block text-gray-700 mb-2" id="villageLabel">Village/Area</label>
+                        <input type="text" id="village" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition mt-6 font-semibold" id="authSubmitBtn">Continue</button>
+                <button type="button" onclick="closeAuthModal()" class="w-full bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition mt-2">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Customer Dashboard -->
+    <div id="customerDashboard" class="hidden container mx-auto px-4 py-8">
+        <div class="grid md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="totalRequestsLabel">Total Requests</h3>
+                <p class="text-3xl font-bold text-blue-600" id="totalRequests">0</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="activeRequestsLabel">Active Requests</h3>
+                <p class="text-3xl font-bold text-green-600" id="activeRequests">0</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="completedRequestsLabel">Completed</h3>
+                <p class="text-3xl font-bold text-gray-600" id="completedRequests">0</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-6" id="postWorkRequestLabel">Post Work Request</h2>
+            <form id="workRequestForm" onsubmit="submitWorkRequest(event)">
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold" id="workCategoryLabel">Work Category</label>
+                        <select id="workCategory" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required onchange="updateSubcategories()">
+                            <option value="">Select Category</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold" id="workSubcategoryLabel">Work Subcategory</label>
+                        <select id="workSubcategory" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                            <option value="">Select Subcategory</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold" id="numWorkersLabel">Number of Workers</label>
+                        <input type="number" id="numWorkers" min="1" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold" id="workDateLabel">Work Date</label>
+                        <input type="date" id="workDate" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold" id="workDurationLabel">Duration (Days)</label>
+                        <input type="number" id="workDuration" min="1" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold" id="wageLabel">Daily Wage per Worker (₹)</label>
+                        <input type="number" id="wage" min="1" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-gray-700 mb-2 font-semibold" id="locationLabel">Location</label>
+                        <input type="text" id="workLocation" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-gray-700 mb-2 font-semibold" id="descriptionLabel">Description</label>
+                        <textarea id="workDescription" rows="3" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required></textarea>
+                    </div>
+                </div>
+                <button type="submit" class="mt-6 bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition font-semibold" id="submitRequestBtn">Post Request</button>
+            </form>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-6" id="yourRequestsLabel">Your Work Requests</h2>
+            <div id="customerRequestsList" class="space-y-4">
+                <p class="text-gray-500 text-center py-8" id="noRequestsMsg">No work requests yet. Post your first request above!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agent Dashboard -->
+    <div id="agentDashboard" class="hidden container mx-auto px-4 py-8">
+        <div class="grid md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="availableJobsLabel">Available Jobs</h3>
+                <p class="text-3xl font-bold text-blue-600" id="availableJobs">0</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="acceptedJobsLabel">Accepted Jobs</h3>
+                <p class="text-3xl font-bold text-green-600" id="acceptedJobs">0</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="registeredWorkersLabel">My Workers</h3>
+                <p class="text-3xl font-bold text-purple-600" id="registeredWorkers">0</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="earningsLabel">Total Earnings</h3>
+                <p class="text-3xl font-bold text-yellow-600" id="totalEarnings">₹0</p>
+            </div>
+        </div>
+
+        <!-- Agent Tabs -->
+        <div class="bg-white rounded-lg shadow-lg mb-6">
+            <div class="flex border-b overflow-x-auto">
+                <button onclick="switchAgentTab('available')" id="tabAvailable" class="px-6 py-4 font-semibold tab-active whitespace-nowrap">
+                    <span id="tabAvailableText">Available Jobs</span>
+                </button>
+                <button onclick="switchAgentTab('accepted')" id="tabAccepted" class="px-6 py-4 font-semibold text-gray-500 whitespace-nowrap">
+                    <span id="tabAcceptedText">My Accepted Jobs</span>
+                </button>
+                <button onclick="switchAgentTab('workers')" id="tabWorkers" class="px-6 py-4 font-semibold text-gray-500 whitespace-nowrap">
+                    <span id="tabWorkersText">My Workers</span>
+                </button>
+                <button onclick="switchAgentTab('requests')" id="tabRequests" class="px-6 py-4 font-semibold text-gray-500 whitespace-nowrap">
+                    <span id="tabRequestsText">Worker Requests</span>
+                    <span id="requestsBadge" class="hidden ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">0</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Available Jobs Tab -->
+        <div id="agentTabAvailable" class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold" id="availableWorkLabel">Available Work Requests</h2>
+            </div>
+            <div id="agentWorkList" class="grid md:grid-cols-2 gap-4">
+                <p class="text-gray-500 text-center py-8 col-span-2" id="noWorkAvailableMsg">No work requests available at the moment.</p>
+            </div>
+        </div>
+
+        <!-- Accepted Jobs Tab -->
+        <div id="agentTabAccepted" class="hidden bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-6" id="myAcceptedJobsLabel">My Accepted Jobs</h2>
+            <div id="agentAcceptedList" class="space-y-4">
+                <p class="text-gray-500 text-center py-8" id="noAcceptedMsg">No accepted jobs yet.</p>
+            </div>
+        </div>
+
+        <!-- My Workers Tab -->
+        <div id="agentTabWorkers" class="hidden bg-white rounded-lg shadow-lg p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold" id="myWorkersLabel">My Workers</h2>
+                <button onclick="showAddWorkerModal()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    <span id="addWorkerBtn">Add Worker</span>
+                </button>
+            </div>
+            <div id="myWorkersList" class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <p class="text-gray-500 text-center py-8 col-span-full" id="noWorkersMsg">No workers registered yet.</p>
+            </div>
+        </div>
+
+        <!-- Worker Requests Tab -->
+        <div id="agentTabRequests" class="hidden bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-6" id="workerRequestsLabel">Worker Requests</h2>
+            <div id="workerRequestsList" class="grid md:grid-cols-2 gap-4">
+                <p class="text-gray-500 text-center py-8 col-span-2" id="noWorkerRequestsMsg">No worker requests at the moment.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Worker Dashboard -->
+    <div id="workerDashboard" class="hidden container mx-auto px-4 py-8">
+        <div class="grid md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="profileStatusLabel">Profile Status</h3>
+                <p class="text-2xl font-bold text-blue-600" id="profileStatus">Incomplete</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="workRequestStatusLabel">Work Request Status</h3>
+                <p class="text-2xl font-bold text-green-600" id="workRequestStatus">No Active Request</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-2 text-gray-700" id="jobsCompletedLabel">Jobs Completed</h3>
+                <p class="text-3xl font-bold text-purple-600" id="jobsCompleted">0</p>
+            </div>
+        </div>
+
+        <!-- Worker Agent Info -->
+        <div id="workerAgentInfo" class="hidden bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg shadow-lg p-6 mb-8">
+            <h3 class="text-xl font-bold mb-2" id="yourAgentLabel">Your Agent</h3>
+            <div id="agentDetails" class="flex items-center justify-between">
+                <div>
+                    <p class="text-lg" id="workerAgentName"></p>
+                    <p class="opacity-90" id="workerAgentPhone"></p>
+                </div>
+                <a id="callAgentBtn" href="" class="bg-white text-green-600 px-4 py-2 rounded-lg font-semibold hover:bg-green-50 transition">
+                    <span id="callText">📞 Call</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-bold mb-6" id="myProfileLabel">My Profile</h2>
+                <form id="workerProfileForm" onsubmit="updateWorkerProfile(event)">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="workerNameLabel">Full Name</label>
+                            <input type="text" id="workerName" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="workerPhoneLabel">Phone Number</label>
+                            <input type="tel" id="workerPhone" class="w-full border rounded-lg px-4 py-2 bg-gray-100" readonly>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="workerAgeLabel">Age</label>
+                            <input type="number" id="workerAge" min="18" max="65" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="workerVillageLabel">Village/Area</label>
+                            <input type="text" id="workerVillage" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="workerSkillsLabel">Skills</label>
+                            <select id="workerSkills" multiple class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 h-32" required>
+                            </select>
+                            <p class="text-sm text-gray-500 mt-1" id="skillsHint">Hold Ctrl/Cmd to select multiple</p>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="workerExperienceLabel">Experience (Years)</label>
+                            <input type="number" id="workerExperience" min="0" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="mt-6 bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition font-semibold w-full" id="updateProfileBtn">Update Profile</button>
+                </form>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-bold mb-6" id="requestWorkLabel">Request Work</h2>
+                
+                <!-- Active Request Display -->
+                <div id="activeWorkerRequest" class="hidden mb-6">
+                    <div id="acceptedRequestCard" class="hidden p-4 bg-green-50 border-2 border-green-500 rounded-lg">
+                        <div class="flex items-center mb-2">
+                            <svg class="w-6 h-6 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <h3 class="font-bold text-green-800" id="requestAcceptedLabel">Request Accepted!</h3>
+                        </div>
+                        <p id="acceptedRequestDetails" class="text-gray-700 mb-2"></p>
+                        <p id="acceptedByAgent" class="text-sm text-green-700"></p>
+                    </div>
+                    <div id="pendingRequestCard" class="hidden p-4 bg-yellow-50 border-2 border-yellow-500 rounded-lg">
+                        <div class="flex items-center mb-2">
+                            <svg class="w-6 h-6 text-yellow-600 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <h3 class="font-bold text-yellow-800" id="requestPendingLabel">Request Pending</h3>
+                        </div>
+                        <p id="pendingRequestDetails" class="text-gray-700"></p>
+                        <button onclick="cancelWorkerRequest()" class="mt-3 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition" id="cancelRequestBtn">Cancel Request</button>
+                    </div>
+                </div>
+
+                <!-- Request Form -->
+                <form id="workerRequestForm" onsubmit="submitWorkerRequest(event)">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="preferredWorkLabel">Preferred Work Type</label>
+                            <select id="preferredWork" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                                <option value="">Select Work Type</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="availabilityLabel">Availability</label>
+                            <select id="availability" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="expectedWageLabel">Expected Daily Wage (₹)</label>
+                            <input type="number" id="expectedWage" min="1" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2 font-semibold" id="notesLabel">Additional Notes</label>
+                            <textarea id="workerNotes" rows="3" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"></textarea>
+                        </div>
+                    </div>
+                    <button type="submit" class="mt-6 bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition font-semibold w-full" id="submitWorkerRequestBtn">Submit Request</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Worker Modal -->
+    <div id="addWorkerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-8 max-w-md w-full slide-in">
+            <h2 class="text-2xl font-bold mb-6 text-center" id="addWorkerTitle">Add Worker Manually</h2>
+            <form id="addWorkerForm" onsubmit="addWorkerManually(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold">Worker Name</label>
+                        <input type="text" id="manualWorkerName" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold">Phone Number</label>
+                        <input type="tel" id="manualWorkerPhone" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold">Age</label>
+                        <input type="number" id="manualWorkerAge" min="18" max="65" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold">Village/Area</label>
+                        <input type="text" id="manualWorkerVillage" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 mb-2 font-semibold">Skills</label>
+                        <select id="manualWorkerSkills" multiple class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 h-24" required>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition mt-6 font-semibold">Add Worker</button>
+                <button type="button" onclick="closeAddWorkerModal()" class="w-full bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition mt-2">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Allocate Workers Modal -->
+    <div id="allocateWorkersModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-8 max-w-2xl w-full slide-in max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-2 text-center" id="allocateWorkersTitle">Allocate Workers to Job</h2>
+            <p id="allocateJobDetails" class="text-center text-gray-600 mb-6"></p>
+            <div id="availableWorkersForAllocation" class="space-y-3 mb-6">
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="confirmAllocation()" class="flex-1 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition font-semibold">Confirm Allocation</button>
+                <button onclick="closeAllocateModal()" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition font-semibold">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Panel -->
+    <div id="notificationPanel" class="hidden fixed right-4 top-20 w-96 bg-white rounded-lg shadow-2xl z-40 max-h-96 overflow-y-auto">
+        <div class="p-4 border-b bg-blue-600 text-white rounded-t-lg flex justify-between items-center">
+            <h3 class="font-bold" id="notificationsTitle">Notifications</h3>
+            <button onclick="closeNotifications()" class="text-white hover:text-gray-200">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="notificationsList" class="p-4">
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // FIREBASE CONFIGURATION
+        // ============================================
+        // Your Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCYPydzJD19Urljx3AOV4MMioGIfVQb2gQ",
+            authDomain: "worker-bridge.firebaseapp.com",
+            projectId: "worker-bridge",
+            storageBucket: "worker-bridge.firebasestorage.app",
+            messagingSenderId: "538409355033",
+            appId: "1:538409355033:web:d953a7d7f137050ddba788"
+        };
+
+        // Initialize Firebase
+        let db, auth;
+        let useFirebase = false;
+        
+        try {
+            // Check if Firebase config is valid (not placeholder)
+            if (firebaseConfig.apiKey !== "YOUR_API_KEY_HERE" && firebaseConfig.apiKey.length > 10) {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                auth = firebase.auth();
+                useFirebase = true;
+                console.log('✅ Firebase initialized successfully!');
+            } else {
+                console.log('⚠️ Firebase not configured. Using localStorage for testing.');
+                console.log('📝 See FIREBASE_SETUP_GUIDE.md for setup instructions.');
+            }
+        } catch (error) {
+            console.warn('⚠️ Firebase initialization error:', error.message);
+            console.log('📝 Falling back to localStorage mode.');
+            useFirebase = false;
+        }
+
+        // Firebase Helper Functions with localStorage fallback
+        const FirebaseHelper = {
+            // Collections
+            users: () => useFirebase ? db.collection('users') : null,
+            workRequests: () => useFirebase ? db.collection('workRequests') : null,
+            workerProfiles: () => useFirebase ? db.collection('workerProfiles') : null,
+            workerRequests: () => useFirebase ? db.collection('workerRequests') : null,
+            acceptedJobs: () => useFirebase ? db.collection('acceptedJobs') : null,
+            notifications: () => useFirebase ? db.collection('notifications') : null,
+            jobAllocations: () => useFirebase ? db.collection('jobAllocations') : null,
+
+            // Save data (with localStorage fallback)
+            async save(collection, data) {
+                if (useFirebase) {
+                    try {
+                        if (data.id) {
+                            await collection.doc(data.id).set(data);
+                        } else {
+                            const docRef = await collection.add(data);
+                            data.id = docRef.id;
+                        }
+                        return data;
+                    } catch (error) {
+                        console.error('Firebase save error:', error);
+                        throw error;
+                    }
+                } else {
+                    // Use localStorage
+                    return this.saveToLocalStorage(data);
+                }
+            },
+
+            // Get all documents from collection (with localStorage fallback)
+            async getAll(collection) {
+                if (useFirebase) {
+                    try {
+                        const snapshot = await collection.get();
+                        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    } catch (error) {
+                        console.error('Firebase get error:', error);
+                        return [];
+                    }
+                } else {
+                    // Use localStorage
+                    return this.getAllFromLocalStorage();
+                }
+            },
+
+            // Delete document (with localStorage fallback)
+            async delete(collection, id) {
+                if (useFirebase) {
+                    try {
+                        await collection.doc(id).delete();
+                    } catch (error) {
+                        console.error('Firebase delete error:', error);
+                    }
+                } else {
+                    // Use localStorage
+                    this.deleteFromLocalStorage(id);
+                }
+            },
+
+            // Real-time listener (with localStorage fallback - polling)
+            listen(collection, callback) {
+                if (useFirebase) {
+                    return collection.onSnapshot(snapshot => {
+                        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        callback(data);
+                    });
+                } else {
+                    // For localStorage, return empty function (no real-time updates)
+                    return () => {};
+                }
+            },
+
+            // LocalStorage helpers
+            saveToLocalStorage(data) {
+                // Determine collection name from data type
+                let collectionName = this.getCollectionName(data);
+                let items = JSON.parse(localStorage.getItem(collectionName) || '[]');
+                
+                const index = items.findIndex(item => item.id === data.id);
+                if (index >= 0) {
+                    items[index] = data;
+                } else {
+                    items.push(data);
+                }
+                
+                localStorage.setItem(collectionName, JSON.stringify(items));
+                return data;
+            },
+
+            getAllFromLocalStorage() {
+                // This will be called with proper collection name
+                return [];
+            },
+
+            deleteFromLocalStorage(id) {
+                // Implementation for deletion
+            },
+
+            getCollectionName(data) {
+                if (data.userType) return 'users';
+                if (data.customerId) return 'workRequests';
+                if (data.agentId && data.requestId) return 'acceptedJobs';
+                if (data.workerId && data.preferredWork) return 'workerRequests';
+                if (data.userId && data.type) return 'notifications';
+                if (data.jobId && data.workerId) return 'jobAllocations';
+                if (data.userId && !data.requestId) return 'workerProfiles';
+                return 'data';
+            }
+        };
+
+        // Translation dictionary
+        const translations = {
+            en: {
+                welcomeTitle: "Welcome to Worker Bridge",
+                welcomeSubtitle: "Connecting Workers, Agents, and Employers",
+                selectUserType: "Select User Type",
+                customerLabel: "Customer",
+                customerDesc: "Need workers for your project",
+                agentLabel: "Agent",
+                agentDesc: "Manage workers in your area",
+                workerLabel: "Worker",
+                workerDesc: "Find work opportunities",
+                totalRequestsLabel: "Total Requests",
+                activeRequestsLabel: "Active Requests",
+                completedRequestsLabel: "Completed",
+                postWorkRequestLabel: "Post Work Request",
+                workCategoryLabel: "Work Category",
+                workSubcategoryLabel: "Work Subcategory",
+                numWorkersLabel: "Number of Workers",
+                workDateLabel: "Work Date",
+                workDurationLabel: "Duration (Days)",
+                wageLabel: "Daily Wage per Worker (₹)",
+                locationLabel: "Location",
+                descriptionLabel: "Description",
+                submitRequestBtn: "Post Request",
+                yourRequestsLabel: "Your Work Requests",
+                noRequestsMsg: "No work requests yet. Post your first request above!",
+                availableJobsLabel: "Available Jobs",
+                acceptedJobsLabel: "Accepted Jobs",
+                registeredWorkersLabel: "My Workers",
+                earningsLabel: "Total Earnings",
+                availableWorkLabel: "Available Work Requests",
+                noWorkAvailableMsg: "No work requests available at the moment.",
+                myAcceptedJobsLabel: "My Accepted Jobs",
+                noAcceptedMsg: "No accepted jobs yet.",
+                workerRequestsLabel: "Worker Requests",
+                noWorkerRequestsMsg: "No worker requests at the moment.",
+                profileStatusLabel: "Profile Status",
+                workRequestStatusLabel: "Work Request Status",
+                jobsCompletedLabel: "Jobs Completed",
+                myProfileLabel: "My Profile",
+                workerNameLabel: "Full Name",
+                workerPhoneLabel: "Phone Number",
+                workerAgeLabel: "Age",
+                workerVillageLabel: "Village/Area",
+                workerSkillsLabel: "Skills",
+                skillsHint: "Hold Ctrl/Cmd to select multiple",
+                workerExperienceLabel: "Experience (Years)",
+                updateProfileBtn: "Update Profile",
+                requestWorkLabel: "Request Work",
+                preferredWorkLabel: "Preferred Work Type",
+                availabilityLabel: "Availability",
+                expectedWageLabel: "Expected Daily Wage (₹)",
+                notesLabel: "Additional Notes",
+                submitWorkerRequestBtn: "Submit Request",
+                activeRequestLabel: "Active Request",
+                cancelRequestBtn: "Cancel Request",
+                logoutBtn: "Logout",
+                notificationsTitle: "Notifications",
+                nameLabel: "Full Name",
+                phoneLabel: "Phone Number",
+                passwordLabel: "Password",
+                villageLabel: "Village/Area",
+                immediate: "Immediate",
+                within_week: "Within a week",
+                within_month: "Within a month",
+                flexible: "Flexible",
+                workers: "workers",
+                days: "days",
+                perWorker: "per worker",
+                pending: "Pending",
+                accepted: "Accepted",
+                completed: "Completed",
+                accept: "Accept",
+                reject: "Reject",
+                markComplete: "Mark Complete",
+                contact: "Contact",
+                incomplete: "Incomplete",
+                complete: "Complete",
+                noActiveRequest: "No Active Request",
+                profileUpdated: "Profile updated successfully!",
+                requestSubmitted: "Work request submitted successfully!",
+                requestCancelled: "Request cancelled",
+                jobAccepted: "Job accepted successfully!",
+                jobRejected: "Job rejected",
+                workerApproved: "Worker approved successfully!",
+                newWorkRequest: "New work request available!",
+                category: "Category",
+                subcategory: "Subcategory",
+                tabAvailableText: "Available Jobs",
+                tabAcceptedText: "My Accepted Jobs",
+                tabWorkersText: "My Workers",
+                tabRequestsText: "Worker Requests",
+                myWorkersLabel: "My Workers",
+                addWorkerBtn: "Add Worker",
+                noWorkersMsg: "No workers registered yet.",
+                yourAgentLabel: "Your Agent",
+                callText: "📞 Call",
+                requestAcceptedLabel: "Request Accepted!",
+                requestPendingLabel: "Request Pending",
+                addWorkerTitle: "Add Worker Manually",
+                allocateWorkersTitle: "Allocate Workers to Job",
+                allocatedWorkers: "Allocated Workers",
+                noAllocatedWorkers: "No workers allocated yet",
+                allocateWorkers: "Allocate Workers",
+                viewAllocated: "View Allocated Workers",
+                workerAdded: "Worker added successfully!",
+                selectWorkersToAllocate: "Select workers to allocate:",
+                workersNeeded: "Workers Needed",
+                workersAllocated: "Workers Allocated",
+                experience: "Experience",
+                years: "years",
+                skills: "Skills",
+                removeWorker: "Remove"
+            },
+            te: {
+                welcomeTitle: "వర్కర్ బ్రిడ్జ్‌కు స్వాగతం",
+                welcomeSubtitle: "కార్మికులు, ఏజెంట్లు మరియు యజమానులను కలుపుతోంది",
+                selectUserType: "వినియోగదారు రకాన్ని ఎంచుకోండి",
+                customerLabel: "కస్టమర్",
+                customerDesc: "మీ ప్రాజెక్ట్‌కు కార్మికులు కావాలి",
+                agentLabel: "ఏజెంట్",
+                agentDesc: "మీ ప్రాంతంలో కార్మికులను నిర్వహించండి",
+                workerLabel: "కార్మికుడు",
+                workerDesc: "పని అవకాశాలను కనుగొనండి",
+                totalRequestsLabel: "మొత్తం అభ్యర్థనలు",
+                activeRequestsLabel: "క్రియాశీల అభ్యర్థనలు",
+                completedRequestsLabel: "పూర్తయినవి",
+                postWorkRequestLabel: "పని అభ్యర్థనను పోస్ట్ చేయండి",
+                workCategoryLabel: "పని వర్గం",
+                workSubcategoryLabel: "పని ఉపవర్గం",
+                numWorkersLabel: "కార్మికుల సంఖ్య",
+                workDateLabel: "పని తేదీ",
+                workDurationLabel: "వ్యవధి (రోజులు)",
+                wageLabel: "ప్రతి కార్మికుడికి రోజువారీ వేతనం (₹)",
+                locationLabel: "స్థానం",
+                descriptionLabel: "వివరణ",
+                submitRequestBtn: "అభ్యర్థనను పోస్ట్ చేయండి",
+                yourRequestsLabel: "మీ పని అభ్యర్థనలు",
+                noRequestsMsg: "ఇంకా పని అభ్యర్థనలు లేవు. పైన మీ మొదటి అభ్యర్థనను పోస్ట్ చేయండి!",
+                availableJobsLabel: "అందుబాటులో ఉన్న ఉద్యోగాలు",
+                acceptedJobsLabel: "ఆమోదించిన ఉద్యోగాలు",
+                registeredWorkersLabel: "నా కార్మికులు",
+                earningsLabel: "మొత్తం ఆదాయం",
+                availableWorkLabel: "అందుబాటులో ఉన్న పని అభ్యర్థనలు",
+                noWorkAvailableMsg: "ప్రస్తుతం పని అభ్యర్థనలు అందుబాటులో లేవు.",
+                myAcceptedJobsLabel: "నా ఆమోదించిన ఉద్యోగాలు",
+                noAcceptedMsg: "ఇంకా ఆమోదించిన ఉద్యోగాలు లేవు.",
+                workerRequestsLabel: "కార్మిక అభ్యర్థనలు",
+                noWorkerRequestsMsg: "ప్రస్తుతం కార్మిక అభ్యర్థనలు లేవు.",
+                profileStatusLabel: "ప్రొఫైల్ స్థితి",
+                workRequestStatusLabel: "పని అభ్యర్థన స్థితి",
+                jobsCompletedLabel: "పూర్తయిన ఉద్యోగాలు",
+                myProfileLabel: "నా ప్రొఫైల్",
+                workerNameLabel: "పూర్తి పేరు",
+                workerPhoneLabel: "ఫోన్ నంబర్",
+                workerAgeLabel: "వయస్సు",
+                workerVillageLabel: "గ్రామం/ప్రాంతం",
+                workerSkillsLabel: "నైపుణ్యాలు",
+                skillsHint: "బహుళ ఎంపికలకు Ctrl/Cmd పట్టుకోండి",
+                workerExperienceLabel: "అనుభవం (సంవత్సరాలు)",
+                updateProfileBtn: "ప్రొఫైల్‌ను నవీకరించండి",
+                requestWorkLabel: "పనిని అభ్యర్థించండి",
+                preferredWorkLabel: "ఇష్టపడే పని రకం",
+                availabilityLabel: "అందుబాటు",
+                expectedWageLabel: "ఊహించిన రోజువారీ వేతనం (₹)",
+                notesLabel: "అదనపు గమనికలు",
+                submitWorkerRequestBtn: "అభ్యర్థనను సమర్పించండి",
+                activeRequestLabel: "క్రియాశీల అభ్యర్థన",
+                cancelRequestBtn: "అభ్యర్థనను రద్దు చేయండి",
+                logoutBtn: "లాగ్అవుట్",
+                notificationsTitle: "నోటిఫికేషన్‌లు",
+                nameLabel: "పూర్తి పేరు",
+                phoneLabel: "ఫోన్ నంబర్",
+                passwordLabel: "పాస్‌వర్డ్",
+                villageLabel: "గ్రామం/ప్రాంతం",
+                immediate: "తక్షణమే",
+                within_week: "ఒక వారంలో",
+                within_month: "ఒక నెలలో",
+                flexible: "సౌకర్యవంతంగా",
+                workers: "కార్మికులు",
+                days: "రోజులు",
+                perWorker: "ప్రతి కార్మికుడికి",
+                pending: "పెండింగ్",
+                accepted: "ఆమోదించబడింది",
+                completed: "పూర్తయింది",
+                accept: "ఆమోదించు",
+                reject: "తిరస్కరించు",
+                markComplete: "పూర్తయినట్లు గుర్తించు",
+                contact: "సంప్రదించండి",
+                incomplete: "అసంపూర్ణం",
+                complete: "పూర్తి",
+                noActiveRequest: "క్రియాశీల అభ్యర్థన లేదు",
+                profileUpdated: "ప్రొఫైల్ విజయవంతంగా నవీకరించబడింది!",
+                requestSubmitted: "పని అభ్యర్థన విజయవంతంగా సమర్పించబడింది!",
+                requestCancelled: "అభ్యర్థన రద్దు చేయబడింది",
+                jobAccepted: "ఉద్యోగం విజయవంతంగా ఆమోదించబడింది!",
+                jobRejected: "ఉద్యోగం తిరస్కరించబడింది",
+                workerApproved: "కార్మికుడు విజయవంతంగా ఆమోదించబడ్డారు!",
+                newWorkRequest: "కొత్త పని అభ్యర్థన అందుబాటులో ఉంది!",
+                category: "వర్గం",
+                subcategory: "ఉపవర్గం",
+                tabAvailableText: "అందుబాటులో ఉన్న ఉద్యోగాలు",
+                tabAcceptedText: "నా ఆమోదించిన ఉద్యోగాలు",
+                tabWorkersText: "నా కార్మికులు",
+                tabRequestsText: "కార్మిక అభ్యర్థనలు",
+                myWorkersLabel: "నా కార్మికులు",
+                addWorkerBtn: "కార్మికుడిని జోడించు",
+                noWorkersMsg: "ఇంకా కార్మికులు నమోదు కాలేదు.",
+                yourAgentLabel: "మీ ఏజెంట్",
+                callText: "📞 కాల్",
+                requestAcceptedLabel: "అభ్యర్థన ఆమోదించబడింది!",
+                requestPendingLabel: "అభ్యర్థన పెండింగ్‌లో ఉంది",
+                addWorkerTitle: "కార్మికుడిని మాన్యువల్‌గా జోడించు",
+                allocateWorkersTitle: "ఉద్యోగానికి కార్మికులను కేటాయించు",
+                allocatedWorkers: "కేటాయించిన కార్మికులు",
+                noAllocatedWorkers: "ఇంకా కార్మికులు కేటాయించబడలేదు",
+                allocateWorkers: "కార్మికులను కేటాయించు",
+                viewAllocated: "కేటాయించిన కార్మికులను చూడండి",
+                workerAdded: "కార్మికుడు విజయవంతంగా జోడించబడ్డారు!",
+                selectWorkersToAllocate: "కేటాయించడానికి కార్మికులను ఎంచుకోండి:",
+                workersNeeded: "అవసరమైన కార్మికులు",
+                workersAllocated: "కేటాయించిన కార్మికులు",
+                experience: "అనుభవం",
+                years: "సంవత్సరాలు",
+                skills: "నైపుణ్యాలు",
+                removeWorker: "తొలగించు"
+            }
+        };
+
+        // Work categories with subcategories
+        const workCategories = {
+            en: {
+                "Farming": ["Crop Harvesting", "Plowing", "Sowing Seeds", "Spreading Pesticides", "Irrigation Work", "Weeding", "Land Preparation", "Fertilizer Application", "Rice Transplanting", "Cotton Picking", "Sugarcane Cutting", "Vegetable Picking", "Fruit Harvesting", "Threshing", "Winnowing"],
+                "Construction": ["Masonry", "Painting", "Carpentry", "Plastering", "Tile Work", "Electrical Work", "Plumbing", "Concrete Work", "Roofing", "Welding", "Scaffolding", "Brick Laying", "Centering Work", "Sand Work", "Steel Binding"],
+                "Housekeeping": ["House Cleaning", "Gardening", "Cooking", "Washing Clothes", "Dish Washing", "Elderly Care", "Child Care", "Pet Care"],
+                "Loading/Unloading": ["Goods Loading", "Unloading Trucks", "Warehouse Work", "Material Handling", "Furniture Moving", "Container Loading"],
+                "Road Work": ["Road Construction", "Road Repair", "Digging", "Stone Work", "Tar Work", "Drainage Work"],
+                "Factory Work": ["Packaging", "Assembly Line", "Quality Check", "Machine Operation", "Cleaning"],
+                "Event Work": ["Event Setup", "Catering Support", "Tent Setup", "Decoration", "Cleaning"],
+                "Other": ["General Labor", "Demolition", "Landscaping", "Moving/Shifting", "Well Digging", "Pond Cleaning"]
+            },
+            te: {
+                "వ్యవసాయం": ["పంట కోత", "దున్నుట", "విత్తనాలు నాటడం", "పురుగుమందులు చల్లడం", "నీటిపారుదల పని", "కలుపు తీయడం", "భూమి సిద్ధం", "ఎరువుల పంపిణీ", "వరి నాట్లు", "పత్తి తీయడం", "చెరకు కోత", "కూరగాయలు తీయడం", "పండ్లు కోయడం", "నూర్పిడి", "తూర్పారపట్టడం"],
+                "నిర్మాణం": ["రాతి పని", "పెయింటింగ్", "వడ్రంగి పని", "ప్లాస్టరింగ్", "టైల్ వర్క్", "ఎలక్ట్రికల్ పని", "ప్లంబింగ్", "కాంక్రీట్ పని", "పైకప్పు పని", "వెల్డింగ్", "స్కాఫోల్డింగ్", "ఇటుకలు పేర్చడం", "సెంటరింగ్ పని", "ఇసుక పని", "స్టీల్ బైండింగ్"],
+                "గృహ నిర్వహణ": ["ఇల్లు శుభ్రపరచడం", "తోటపని", "వంట", "బట్టలు ఉతకడం", "పాత్రలు కడగడం", "వృద్ధుల సంరక్షణ", "పిల్లల సంరక్షణ", "పెంపుడు జంతువుల సంరక్షణ"],
+                "లోడింగ్/అన్‌లోడింగ్": ["సరుకుల లోడింగ్", "ట్రక్కుల అన్‌లోడింగ్", "గిడ్డంగి పని", "వస్తువుల నిర్వహణ", "ఫర్నిచర్ తరలింపు", "కంటైనర్ లోడింగ్"],
+                "రోడ్డు పని": ["రోడ్డు నిర్మాణం", "రోడ్డు మరమ్మతు", "త్రవ్వకం", "రాతి పని", "తారు పని", "డ్రైనేజీ పని"],
+                "ఫ్యాక్టరీ పని": ["ప్యాకేజింగ్", "అసెంబ్లీ లైన్", "నాణ్యత తనిఖీ", "యంత్ర నిర్వహణ", "శుభ్రపరచడం"],
+                "కార్యక్రమ పని": ["కార్యక్రమ ఏర్పాటు", "క్యాటరింగ్ సహాయం", "టెంట్ ఏర్పాటు", "అలంకరణ", "శుభ్రపరచడం"],
+                "ఇతర": ["సాధారణ కార్మికులు", "కూల్చివేత", "భూ అలంకరణ", "తరలింపు", "బావి త్రవ్వకం", "చెరువు శుభ్రం"]
+            }
+        };
+
+        // Global state
+        let currentLanguage = 'en';
+        let currentUser = null;
+        let currentUserType = null;
+        let authMode = 'signin';
+        let currentAgentTab = 'available';
+        let currentAllocatingJobId = null;
+
+        // Data storage
+        let workRequests = [];
+        let users = [];
+        let workerProfiles = [];
+        let workerRequests = [];
+        let acceptedJobs = [];
+        let notifications = [];
+        let jobAllocations = [];
+        let unsubscribeListeners = [];
+
+        // Language functions
+        function selectLanguage(lang) {
+            currentLanguage = lang;
+            document.getElementById('languageModal').classList.add('hidden');
+            document.getElementById('welcomeScreen').classList.remove('hidden');
+            document.getElementById('langToggleBtn').textContent = lang === 'en' ? 'తెలుగు' : 'English';
+            updateTranslations();
+            populateWorkCategories();
+            populateWorkerSkills();
+            populateAvailabilityOptions();
+        }
+
+        function toggleLanguage() {
+            currentLanguage = currentLanguage === 'en' ? 'te' : 'en';
+            document.getElementById('langToggleBtn').textContent = currentLanguage === 'en' ? 'తెలుగు' : 'English';
+            updateTranslations();
+            populateWorkCategories();
+            populateWorkerSkills();
+            populateAvailabilityOptions();
+            refreshCurrentDashboard();
+        }
+
+        function updateTranslations() {
+            const t = translations[currentLanguage];
+            Object.keys(t).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                        element.placeholder = t[key];
+                    } else {
+                        element.textContent = t[key];
+                    }
+                }
+            });
+        }
+
+        function getText(key) {
+            return translations[currentLanguage][key] || key;
+        }
+
+        function refreshCurrentDashboard() {
+            if (currentUserType === 'customer') {
+                renderCustomerRequests();
+            } else if (currentUserType === 'agent') {
+                renderAgentWorkList();
+                renderAgentAcceptedJobs();
+                renderMyWorkers();
+                renderWorkerRequests();
+            } else if (currentUserType === 'worker') {
+                updateWorkerStats();
+            }
+        }
+
+        // Populate work categories
+        function populateWorkCategories() {
+            const categorySelect = document.getElementById('workCategory');
+            const preferredWorkSelect = document.getElementById('preferredWork');
+            const categories = workCategories[currentLanguage];
+            
+            if (categorySelect) {
+                categorySelect.innerHTML = '<option value="">' + (currentLanguage === 'en' ? 'Select Category' : 'వర్గం ఎంచుకోండి') + '</option>';
+                Object.keys(categories).forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category;
+                    option.textContent = category;
+                    categorySelect.appendChild(option);
+                });
+            }
+            
+            if (preferredWorkSelect) {
+                preferredWorkSelect.innerHTML = '<option value="">' + (currentLanguage === 'en' ? 'Select Work Type' : 'పని రకాన్ని ఎంచుకోండి') + '</option>';
+                Object.keys(categories).forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category;
+                    option.textContent = category;
+                    preferredWorkSelect.appendChild(option);
+                });
+            }
+        }
+
+        function updateSubcategories() {
+            const categorySelect = document.getElementById('workCategory');
+            const subcategorySelect = document.getElementById('workSubcategory');
+            const selectedCategory = categorySelect.value;
+            const categories = workCategories[currentLanguage];
+            
+            subcategorySelect.innerHTML = '<option value="">' + (currentLanguage === 'en' ? 'Select Subcategory' : 'ఉపవర్గం ఎంచుకోండి') + '</option>';
+            
+            if (selectedCategory && categories[selectedCategory]) {
+                categories[selectedCategory].forEach(subcategory => {
+                    const option = document.createElement('option');
+                    option.value = subcategory;
+                    option.textContent = subcategory;
+                    subcategorySelect.appendChild(option);
+                });
+            }
+        }
+
+        function populateWorkerSkills() {
+            const skillsSelect = document.getElementById('workerSkills');
+            const manualSkillsSelect = document.getElementById('manualWorkerSkills');
+            const categories = workCategories[currentLanguage];
+            
+            [skillsSelect, manualSkillsSelect].forEach(select => {
+                if (select) {
+                    select.innerHTML = '';
+                    Object.keys(categories).forEach(category => {
+                        const optgroup = document.createElement('optgroup');
+                        optgroup.label = category;
+                        categories[category].forEach(skill => {
+                            const option = document.createElement('option');
+                            option.value = skill;
+                            option.textContent = skill;
+                            optgroup.appendChild(option);
+                        });
+                        select.appendChild(optgroup);
+                    });
+                }
+            });
+        }
+
+        function populateAvailabilityOptions() {
+            const availabilitySelect = document.getElementById('availability');
+            const options = [
+                { value: 'immediate', text: getText('immediate') },
+                { value: 'within_week', text: getText('within_week') },
+                { value: 'within_month', text: getText('within_month') },
+                { value: 'flexible', text: getText('flexible') }
+            ];
+            
+            if (availabilitySelect) {
+                availabilitySelect.innerHTML = '';
+                options.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.text;
+                    availabilitySelect.appendChild(option);
+                });
+            }
+        }
+
+        // Auth functions
+        function showAuthModal(userType) {
+            currentUserType = userType;
+            document.getElementById('authModal').classList.remove('hidden');
+            switchAuthMode('signin');
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.add('hidden');
+            document.getElementById('authForm').reset();
+        }
+
+        function switchAuthMode(mode) {
+            authMode = mode;
+            const signinTab = document.getElementById('signinTab');
+            const signupTab = document.getElementById('signupTab');
+            const nameField = document.getElementById('nameField');
+            const villageField = document.getElementById('villageField');
+            const authTitle = document.getElementById('authTitle');
+            
+            if (mode === 'signin') {
+                signinTab.classList.add('bg-blue-600', 'text-white');
+                signinTab.classList.remove('bg-gray-200', 'text-gray-700');
+                signupTab.classList.remove('bg-blue-600', 'text-white');
+                signupTab.classList.add('bg-gray-200', 'text-gray-700');
+                nameField.classList.add('hidden');
+                villageField.classList.add('hidden');
+                authTitle.textContent = currentLanguage === 'en' ? 'Sign In' : 'సైన్ ఇన్';
+            } else {
+                signupTab.classList.add('bg-blue-600', 'text-white');
+                signupTab.classList.remove('bg-gray-200', 'text-gray-700');
+                signinTab.classList.remove('bg-blue-600', 'text-white');
+                signinTab.classList.add('bg-gray-200', 'text-gray-700');
+                nameField.classList.remove('hidden');
+                if (currentUserType === 'agent' || currentUserType === 'worker') {
+                    villageField.classList.remove('hidden');
+                }
+                authTitle.textContent = currentLanguage === 'en' ? 'Sign Up' : 'సైన్ అప్';
+            }
+        }
+
+        async function handleAuth(event) {
+            event.preventDefault();
+            const phone = document.getElementById('phoneNumber').value;
+            const password = document.getElementById('password').value;
+            const fullName = document.getElementById('fullName').value;
+            const village = document.getElementById('village').value;
+
+            try {
+                if (authMode === 'signup') {
+                    // Check if user already exists
+                    const existingUser = users.find(u => u.phone === phone && u.userType === currentUserType);
+                    if (existingUser) {
+                        alert(currentLanguage === 'en' ? 'User already exists! Please sign in.' : 'వినియోగదారు ఇప్పటికే ఉన్నారు! దయచేసి సైన్ ఇన్ చేయండి.');
+                        return;
+                    }
+
+                    const newUser = {
+                        id: Date.now().toString(),
+                        phone,
+                        password,
+                        name: fullName,
+                        village,
+                        userType: currentUserType,
+                        createdAt: new Date().toISOString()
+                    };
+                    
+                    if (useFirebase) {
+                        await FirebaseHelper.save(FirebaseHelper.users(), newUser);
+                    } else {
+                        users.push(newUser);
+                        localStorage.setItem('users', JSON.stringify(users));
+                    }
+                    currentUser = newUser;
+                    
+                    if (currentUserType === 'worker') {
+                        const workerProfile = {
+                            id: Date.now().toString(),
+                            userId: newUser.id,
+                            phone: phone,
+                            name: fullName,
+                            village: village,
+                            profileComplete: false,
+                            createdAt: new Date().toISOString()
+                        };
+                        if (useFirebase) {
+                            await FirebaseHelper.save(FirebaseHelper.workerProfiles(), workerProfile);
+                        } else {
+                            workerProfiles.push(workerProfile);
+                            localStorage.setItem('workerProfiles', JSON.stringify(workerProfiles));
+                        }
+                    }
+                } else {
+                    const user = users.find(u => u.phone === phone && u.password === password && u.userType === currentUserType);
+                    if (!user) {
+                        alert(currentLanguage === 'en' ? 'Invalid credentials!' : 'చెల్లని ఆధారాలు!');
+                        return;
+                    }
+                    currentUser = user;
+                }
+
+                closeAuthModal();
+                showDashboard();
+            } catch (error) {
+                console.error('Auth error:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function showDashboard() {
+            document.getElementById('welcomeScreen').classList.add('hidden');
+            document.getElementById('navbar').classList.remove('hidden');
+            document.getElementById('userNameDisplay').textContent = currentUser.name;
+
+            // Load all data from Firebase
+            await loadFirebaseData();
+
+            if (currentUserType === 'customer') {
+                document.getElementById('customerDashboard').classList.remove('hidden');
+                updateCustomerStats();
+                renderCustomerRequests();
+                setupRealtimeListeners();
+            } else if (currentUserType === 'agent') {
+                document.getElementById('agentDashboard').classList.remove('hidden');
+                document.getElementById('notificationIcon').classList.remove('hidden');
+                updateAgentStats();
+                renderAgentWorkList();
+                renderAgentAcceptedJobs();
+                renderMyWorkers();
+                renderWorkerRequests();
+                updateNotificationBadge();
+                setupRealtimeListeners();
+            } else if (currentUserType === 'worker') {
+                document.getElementById('workerDashboard').classList.remove('hidden');
+                document.getElementById('notificationIcon').classList.remove('hidden');
+                loadWorkerProfile();
+                updateWorkerStats();
+                updateNotificationBadge();
+                setupRealtimeListeners();
+            }
+        }
+
+        // Load all data from Firebase or localStorage
+        async function loadFirebaseData() {
+            try {
+                if (useFirebase) {
+                    [workRequests, users, workerProfiles, workerRequests, acceptedJobs, notifications, jobAllocations] = await Promise.all([
+                        FirebaseHelper.getAll(FirebaseHelper.workRequests()),
+                        FirebaseHelper.getAll(FirebaseHelper.users()),
+                        FirebaseHelper.getAll(FirebaseHelper.workerProfiles()),
+                        FirebaseHelper.getAll(FirebaseHelper.workerRequests()),
+                        FirebaseHelper.getAll(FirebaseHelper.acceptedJobs()),
+                        FirebaseHelper.getAll(FirebaseHelper.notifications()),
+                        FirebaseHelper.getAll(FirebaseHelper.jobAllocations())
+                    ]);
+                    console.log('✅ Data loaded from Firebase');
+                } else {
+                    // Load from localStorage
+                    workRequests = JSON.parse(localStorage.getItem('workRequests') || '[]');
+                    users = JSON.parse(localStorage.getItem('users') || '[]');
+                    workerProfiles = JSON.parse(localStorage.getItem('workerProfiles') || '[]');
+                    workerRequests = JSON.parse(localStorage.getItem('workerRequests') || '[]');
+                    acceptedJobs = JSON.parse(localStorage.getItem('acceptedJobs') || '[]');
+                    notifications = JSON.parse(localStorage.getItem('notifications') || '[]');
+                    jobAllocations = JSON.parse(localStorage.getItem('jobAllocations') || '[]');
+                    console.log('✅ Data loaded from localStorage');
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        // Setup real-time listeners
+        function setupRealtimeListeners() {
+            // Clear previous listeners
+            unsubscribeListeners.forEach(unsubscribe => unsubscribe());
+            unsubscribeListeners = [];
+
+            // Listen to work requests
+            unsubscribeListeners.push(
+                FirebaseHelper.listen(FirebaseHelper.workRequests(), (data) => {
+                    workRequests = data;
+                    refreshCurrentDashboard();
+                })
+            );
+
+            // Listen to notifications
+            unsubscribeListeners.push(
+                FirebaseHelper.listen(FirebaseHelper.notifications(), (data) => {
+                    notifications = data;
+                    updateNotificationBadge();
+                })
+            );
+
+            // Agent-specific listeners
+            if (currentUserType === 'agent') {
+                unsubscribeListeners.push(
+                    FirebaseHelper.listen(FirebaseHelper.workerRequests(), (data) => {
+                        workerRequests = data;
+                        renderWorkerRequests();
+                        updateAgentStats();
+                    })
+                );
+                unsubscribeListeners.push(
+                    FirebaseHelper.listen(FirebaseHelper.acceptedJobs(), (data) => {
+                        acceptedJobs = data;
+                        renderAgentAcceptedJobs();
+                        updateAgentStats();
+                    })
+                );
+            }
+
+            // Worker-specific listeners
+            if (currentUserType === 'worker') {
+                unsubscribeListeners.push(
+                    FirebaseHelper.listen(FirebaseHelper.workerProfiles(), (data) => {
+                        workerProfiles = data;
+                        updateWorkerStats();
+                    })
+                );
+            }
+        }
+
+        function logout() {
+            currentUser = null;
+            currentUserType = null;
+            document.getElementById('navbar').classList.add('hidden');
+            document.getElementById('customerDashboard').classList.add('hidden');
+            document.getElementById('agentDashboard').classList.add('hidden');
+            document.getElementById('workerDashboard').classList.add('hidden');
+            document.getElementById('welcomeScreen').classList.remove('hidden');
+            document.getElementById('notificationIcon').classList.add('hidden');
+        }
+
+        // Customer functions
+        async function submitWorkRequest(event) {
+            event.preventDefault();
+            const request = {
+                id: Date.now().toString(),
+                customerId: currentUser.id,
+                customerName: currentUser.name,
+                customerPhone: currentUser.phone,
+                category: document.getElementById('workCategory').value,
+                subcategory: document.getElementById('workSubcategory').value,
+                numWorkers: parseInt(document.getElementById('numWorkers').value),
+                date: document.getElementById('workDate').value,
+                duration: document.getElementById('workDuration').value,
+                wage: document.getElementById('wage').value,
+                location: document.getElementById('workLocation').value,
+                description: document.getElementById('workDescription').value,
+                status: 'pending',
+                createdAt: new Date().toISOString()
+            };
+
+            try {
+                if (useFirebase) {
+                    await FirebaseHelper.save(FirebaseHelper.workRequests(), request);
+                } else {
+                    workRequests.push(request);
+                    localStorage.setItem('workRequests', JSON.stringify(workRequests));
+                }
+                
+                const agents = users.filter(u => u.userType === 'agent');
+                for (const agent of agents) {
+                    await addNotification(agent.id, getText('newWorkRequest') + ` - ${request.category}`, 'work_request', request.id);
+                }
+
+                updateCustomerStats();
+                renderCustomerRequests();
+                document.getElementById('workRequestForm').reset();
+                alert(getText('requestSubmitted'));
+            } catch (error) {
+                console.error('Error submitting request:', error);
+                alert('Error submitting request. Please try again.');
+            }
+        }
+
+        function updateCustomerStats() {
+            const userRequests = workRequests.filter(r => r.customerId === currentUser.id);
+            document.getElementById('totalRequests').textContent = userRequests.length;
+            document.getElementById('activeRequests').textContent = userRequests.filter(r => r.status === 'accepted').length;
+            document.getElementById('completedRequests').textContent = userRequests.filter(r => r.status === 'completed').length;
+        }
+
+        function renderCustomerRequests() {
+            const userRequests = workRequests.filter(r => r.customerId === currentUser.id).reverse();
+            const container = document.getElementById('customerRequestsList');
+            
+            if (userRequests.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-center py-8">${getText('noRequestsMsg')}</p>`;
+                return;
+            }
+
+            container.innerHTML = userRequests.map(req => {
+                const allocations = jobAllocations.filter(a => a.jobId === req.id);
+                return `
+                    <div class="border rounded-lg p-4 ${req.status === 'accepted' ? 'border-green-500 bg-green-50' : req.status === 'completed' ? 'border-gray-400 bg-gray-50' : 'border-blue-200'}">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h3 class="font-bold text-lg">${req.category} - ${req.subcategory}</h3>
+                                <p class="text-sm text-gray-600">${new Date(req.createdAt).toLocaleDateString()}</p>
+                            </div>
+                            <span class="px-3 py-1 rounded-full text-sm font-semibold ${req.status === 'pending' ? 'bg-yellow-200 text-yellow-800' : req.status === 'accepted' ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-800'}">
+                                ${getText(req.status)}
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+                            <p><strong>${getText('numWorkersLabel')}:</strong> ${req.numWorkers}</p>
+                            <p><strong>${getText('wageLabel')}:</strong> ₹${req.wage}</p>
+                            <p><strong>${getText('workDateLabel')}:</strong> ${req.date}</p>
+                            <p><strong>${getText('workDurationLabel')}:</strong> ${req.duration} ${getText('days')}</p>
+                        </div>
+                        <p class="text-sm"><strong>${getText('locationLabel')}:</strong> ${req.location}</p>
+                        <p class="text-sm"><strong>${getText('descriptionLabel')}:</strong> ${req.description}</p>
+                        ${req.agentName ? `
+                            <div class="mt-3 p-3 bg-blue-50 rounded-lg">
+                                <p class="text-sm font-semibold text-blue-800">${getText('agentLabel')}: ${req.agentName}</p>
+                                <p class="text-sm text-blue-700">📞 ${req.agentPhone}</p>
+                                ${allocations.length > 0 ? `
+                                    <p class="text-sm mt-2 font-semibold">${getText('allocatedWorkers')}: ${allocations.length}/${req.numWorkers}</p>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Agent Tab Functions
+        function switchAgentTab(tab) {
+            currentAgentTab = tab;
+            const tabs = ['available', 'accepted', 'workers', 'requests'];
+            tabs.forEach(t => {
+                document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.remove('tab-active');
+                document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.add('text-gray-500');
+                document.getElementById(`agentTab${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.add('hidden');
+            });
+            document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}`).classList.add('tab-active');
+            document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}`).classList.remove('text-gray-500');
+            document.getElementById(`agentTab${tab.charAt(0).toUpperCase() + tab.slice(1)}`).classList.remove('hidden');
+        }
+
+        // Agent functions
+        function updateAgentStats() {
+            const availableWork = workRequests.filter(r => r.status === 'pending');
+            const myAccepted = acceptedJobs.filter(j => j.agentId === currentUser.id);
+            const myWorkers = workerProfiles.filter(w => w.agentId === currentUser.id);
+            const pendingWorkerRequests = workerRequests.filter(r => r.status === 'pending');
+            
+            document.getElementById('availableJobs').textContent = availableWork.length;
+            document.getElementById('acceptedJobs').textContent = myAccepted.length;
+            document.getElementById('registeredWorkers').textContent = myWorkers.length;
+            
+            // Calculate earnings (10% commission)
+            const earnings = myAccepted.reduce((sum, j) => {
+                const req = workRequests.find(r => r.id === j.requestId);
+                if (req && req.status === 'completed') {
+                    return sum + (parseInt(req.wage) * parseInt(req.numWorkers) * parseInt(req.duration) * 0.1);
+                }
+                return sum;
+            }, 0);
+            document.getElementById('totalEarnings').textContent = '₹' + earnings;
+
+            // Update requests badge
+            const badge = document.getElementById('requestsBadge');
+            if (pendingWorkerRequests.length > 0) {
+                badge.textContent = pendingWorkerRequests.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        function renderAgentWorkList() {
+            const availableWork = workRequests.filter(r => r.status === 'pending');
+            const container = document.getElementById('agentWorkList');
+            
+            if (availableWork.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-center py-8 col-span-2">${getText('noWorkAvailableMsg')}</p>`;
+                return;
+            }
+
+            container.innerHTML = availableWork.map(req => `
+                <div class="border rounded-lg p-4 bg-blue-50 border-blue-200 hover:shadow-lg transition">
+                    <h3 class="font-bold text-lg mb-2">${req.category} - ${req.subcategory}</h3>
+                    <div class="text-sm space-y-1 mb-3">
+                        <p><strong>${getText('customerLabel')}:</strong> ${req.customerName}</p>
+                        <p><strong>${getText('numWorkersLabel')}:</strong> ${req.numWorkers} ${getText('workers')}</p>
+                        <p><strong>${getText('wageLabel')}:</strong> ₹${req.wage} ${getText('perWorker')}</p>
+                        <p><strong>${getText('workDateLabel')}:</strong> ${req.date}</p>
+                        <p><strong>${getText('workDurationLabel')}:</strong> ${req.duration} ${getText('days')}</p>
+                        <p><strong>${getText('locationLabel')}:</strong> ${req.location}</p>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-3">${req.description}</p>
+                    <div class="flex space-x-2">
+                        <button onclick="acceptJob('${req.id}')" class="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-semibold">
+                            ${getText('accept')}
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderAgentAcceptedJobs() {
+            const myJobs = acceptedJobs.filter(j => j.agentId === currentUser.id);
+            const container = document.getElementById('agentAcceptedList');
+            
+            if (myJobs.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-center py-8">${getText('noAcceptedMsg')}</p>`;
+                return;
+            }
+
+            container.innerHTML = myJobs.map(job => {
+                const req = workRequests.find(r => r.id === job.requestId);
+                if (!req) return '';
+                
+                const allocations = jobAllocations.filter(a => a.jobId === req.id);
+                const allocatedWorkerIds = allocations.map(a => a.workerId);
+                const allocatedWorkers = workerProfiles.filter(w => allocatedWorkerIds.includes(w.id || w.userId));
+                
+                return `
+                    <div class="border rounded-lg p-4 ${req.status === 'completed' ? 'bg-gray-50 border-gray-300' : 'bg-green-50 border-green-200'}">
+                        <div class="flex justify-between items-start mb-3">
+                            <h3 class="font-bold text-lg">${req.category} - ${req.subcategory}</h3>
+                            <span class="px-2 py-1 rounded text-xs font-semibold ${req.status === 'completed' ? 'bg-gray-200 text-gray-700' : 'bg-green-200 text-green-800'}">
+                                ${getText(req.status)}
+                            </span>
+                        </div>
+                        <div class="text-sm space-y-1 mb-3">
+                            <p><strong>${getText('customerLabel')}:</strong> ${req.customerName}</p>
+                            <p><strong>${getText('phoneLabel')}:</strong> <a href="tel:${req.customerPhone}" class="text-blue-600">${req.customerPhone}</a></p>
+                            <p><strong>${getText('numWorkersLabel')}:</strong> ${req.numWorkers}</p>
+                            <p><strong>${getText('workDateLabel')}:</strong> ${req.date}</p>
+                            <p><strong>${getText('locationLabel')}:</strong> ${req.location}</p>
+                        </div>
+                        
+                        <!-- Allocated Workers Section -->
+                        <div class="border-t pt-3 mt-3">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-semibold text-sm">${getText('allocatedWorkers')}: ${allocations.length}/${req.numWorkers}</h4>
+                                ${req.status !== 'completed' ? `
+                                    <button onclick="showAllocateModal('${req.id}')" class="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">
+                                        ${getText('allocateWorkers')}
+                                    </button>
+                                ` : ''}
+                            </div>
+                            ${allocatedWorkers.length > 0 ? `
+                                <div class="space-y-2">
+                                    ${allocatedWorkers.map(w => `
+                                        <div class="flex justify-between items-center bg-white p-2 rounded border">
+                                            <div>
+                                                <p class="font-medium text-sm">${w.name}</p>
+                                                <p class="text-xs text-gray-500">${w.phone}</p>
+                                            </div>
+                                            ${req.status !== 'completed' ? `
+                                                <button onclick="removeAllocation('${req.id}', '${w.id || w.userId}')" class="text-red-500 text-xs hover:text-red-700">
+                                                    ${getText('removeWorker')}
+                                                </button>
+                                            ` : ''}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : `<p class="text-xs text-gray-500">${getText('noAllocatedWorkers')}</p>`}
+                        </div>
+                        
+                        ${req.status !== 'completed' ? `
+                            <button onclick="markComplete('${req.id}')" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition mt-3 font-semibold">
+                                ${getText('markComplete')}
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderMyWorkers() {
+            const myWorkers = workerProfiles.filter(w => w.agentId === currentUser.id);
+            const container = document.getElementById('myWorkersList');
+            
+            if (myWorkers.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-center py-8 col-span-full">${getText('noWorkersMsg')}</p>`;
+                return;
+            }
+
+            container.innerHTML = myWorkers.map(worker => `
+                <div class="border rounded-lg p-4 bg-white hover:shadow-lg transition">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="font-bold text-lg">${worker.name}</h3>
+                        <span class="px-2 py-1 rounded text-xs ${worker.isAvailable !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${worker.isAvailable !== false ? (currentLanguage === 'en' ? 'Available' : 'అందుబాటులో') : (currentLanguage === 'en' ? 'Busy' : 'బిజీ')}
+                        </span>
+                    </div>
+                    <div class="text-sm space-y-1">
+                        <p><strong>${getText('phoneLabel')}:</strong> <a href="tel:${worker.phone}" class="text-blue-600">${worker.phone}</a></p>
+                        <p><strong>${getText('workerVillageLabel')}:</strong> ${worker.village || '-'}</p>
+                        <p><strong>${getText('workerAgeLabel')}:</strong> ${worker.age || '-'}</p>
+                        ${worker.skills ? `<p><strong>${getText('skills')}:</strong> ${Array.isArray(worker.skills) ? worker.skills.slice(0, 3).join(', ') : worker.skills}</p>` : ''}
+                        ${worker.experience ? `<p><strong>${getText('experience')}:</strong> ${worker.experience} ${getText('years')}</p>` : ''}
+                    </div>
+                    <div class="mt-3 flex space-x-2">
+                        <a href="tel:${worker.phone}" class="flex-1 bg-green-500 text-white py-2 rounded text-center text-sm hover:bg-green-600">
+                            📞 ${getText('callText')}
+                        </a>
+                        <button onclick="removeWorker('${worker.id || worker.userId}')" class="flex-1 bg-red-100 text-red-600 py-2 rounded text-sm hover:bg-red-200">
+                            ${getText('removeWorker')}
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderWorkerRequests() {
+            const requests = workerRequests.filter(r => r.status === 'pending');
+            const container = document.getElementById('workerRequestsList');
+            
+            if (requests.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-center py-8 col-span-2">${getText('noWorkerRequestsMsg')}</p>`;
+                return;
+            }
+
+            container.innerHTML = requests.map(req => {
+                const worker = workerProfiles.find(w => w.userId === req.workerId);
+                if (!worker) return '';
+                return `
+                    <div class="border rounded-lg p-4 bg-purple-50 border-purple-200">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h3 class="font-bold text-lg">${worker.name}</h3>
+                                <p class="text-sm text-gray-600">${worker.phone}</p>
+                            </div>
+                            <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">${getText('pending')}</span>
+                        </div>
+                        <div class="text-sm space-y-1 mb-3">
+                            <p><strong>${getText('workerVillageLabel')}:</strong> ${worker.village}</p>
+                            <p><strong>${getText('preferredWorkLabel')}:</strong> ${req.preferredWork}</p>
+                            <p><strong>${getText('availabilityLabel')}:</strong> ${getText(req.availability)}</p>
+                            <p><strong>${getText('expectedWageLabel')}:</strong> ₹${req.expectedWage}</p>
+                            ${worker.skills ? `<p><strong>${getText('skills')}:</strong> ${Array.isArray(worker.skills) ? worker.skills.join(', ') : worker.skills}</p>` : ''}
+                            ${req.notes ? `<p><strong>${getText('notesLabel')}:</strong> ${req.notes}</p>` : ''}
+                        </div>
+                        <button onclick="approveWorker('${req.id}', '${worker.userId}')" class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-semibold">
+                            ${getText('accept')} & ${getText('addWorkerBtn')}
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function acceptJob(requestId) {
+            const request = workRequests.find(r => r.id === requestId);
+            if (request) {
+                request.status = 'accepted';
+                request.agentId = currentUser.id;
+                request.agentName = currentUser.name;
+                request.agentPhone = currentUser.phone;
+                
+                const acceptedJob = {
+                    id: Date.now().toString(),
+                    requestId: requestId,
+                    agentId: currentUser.id,
+                    acceptedAt: new Date().toISOString()
+                };
+                
+                try {
+                    if (useFirebase) {
+                        await FirebaseHelper.save(FirebaseHelper.workRequests(), request);
+                        await FirebaseHelper.save(FirebaseHelper.acceptedJobs(), acceptedJob);
+                    } else {
+                        acceptedJobs.push(acceptedJob);
+                        localStorage.setItem('workRequests', JSON.stringify(workRequests));
+                        localStorage.setItem('acceptedJobs', JSON.stringify(acceptedJobs));
+                    }
+                    
+                    // Notify customer
+                    await addNotification(request.customerId, currentLanguage === 'en' ? 
+                        `Your job request has been accepted by ${currentUser.name}` : 
+                        `మీ ఉద్యోగ అభ్యర్థన ${currentUser.name} చే ఆమోదించబడింది`, 'job_accepted', requestId);
+                    
+                    updateAgentStats();
+                    renderAgentAcceptedJobs();
+                    renderAgentWorkList();
+                    alert(getText('jobAccepted'));
+                    switchAgentTab('accepted');
+                } catch (error) {
+                    console.error('Error accepting job:', error);
+                    alert('Error accepting job. Please try again.');
+                }
+            }
+        }
+
+        function markComplete(requestId) {
+            const request = workRequests.find(r => r.id === requestId);
+            if (request) {
+                request.status = 'completed';
+                localStorage.setItem('workRequests', JSON.stringify(workRequests));
+                
+                // Free up allocated workers
+                const allocations = jobAllocations.filter(a => a.jobId === requestId);
+                allocations.forEach(a => {
+                    const worker = workerProfiles.find(w => (w.id || w.userId) === a.workerId);
+                    if (worker) {
+                        worker.isAvailable = true;
+                        worker.jobsCompleted = (worker.jobsCompleted || 0) + 1;
+                    }
+                });
+                localStorage.setItem('workerProfiles', JSON.stringify(workerProfiles));
+                
+                updateAgentStats();
+                renderAgentAcceptedJobs();
+            }
+        }
+
+        function approveWorker(requestId, workerId) {
+            const request = workerRequests.find(r => r.id === requestId);
+            const worker = workerProfiles.find(w => w.userId === workerId);
+            
+            if (request && worker) {
+                request.status = 'approved';
+                request.approvedBy = currentUser.id;
+                request.approvedAt = new Date().toISOString();
+                
+                worker.agentId = currentUser.id;
+                worker.agentName = currentUser.name;
+                worker.agentPhone = currentUser.phone;
+                
+                localStorage.setItem('workerRequests', JSON.stringify(workerRequests));
+                localStorage.setItem('workerProfiles', JSON.stringify(workerProfiles));
+                
+                // Notify worker
+                addNotification(workerId, currentLanguage === 'en' ? 
+                    `Your work request has been approved by ${currentUser.name}` : 
+                    `మీ పని అభ్యర్థన ${currentUser.name} చే ఆమోదించబడింది`, 'request_approved', requestId);
+                
+                alert(getText('workerApproved'));
+                updateAgentStats();
+                renderMyWorkers();
+                renderWorkerRequests();
+            }
+        }
+
+        // Add Worker Manually
+        function showAddWorkerModal() {
+            document.getElementById('addWorkerModal').classList.remove('hidden');
+            populateWorkerSkills();
+        }
+
+        function closeAddWorkerModal() {
+            document.getElementById('addWorkerModal').classList.add('hidden');
+            document.getElementById('addWorkerForm').reset();
+        }
+
+        function addWorkerManually(event) {
+            event.preventDefault();
+            
+            const skills = Array.from(document.getElementById('manualWorkerSkills').selectedOptions).map(o => o.value);
+            
+            const newWorker = {
+                id: Date.now().toString(),
+                name: document.getElementById('manualWorkerName').value,
+                phone: document.getElementById('manualWorkerPhone').value,
+                age: document.getElementById('manualWorkerAge').value,
+                village: document.getElementById('manualWorkerVillage').value,
+                skills: skills,
+                agentId: currentUser.id,
+                agentName: currentUser.name,
+                agentPhone: currentUser.phone,
+                isManuallyAdded: true,
+                isAvailable: true,
+                profileComplete: true,
+                createdAt: new Date().toISOString()
+            };
+            
+            workerProfiles.push(newWorker);
+            localStorage.setItem('workerProfiles', JSON.stringify(workerProfiles));
+            
+            closeAddWorkerModal();
+            alert(getText('workerAdded'));
+            updateAgentStats();
+            renderMyWorkers();
+        }
+
+        function removeWorker(workerId) {
+            if (confirm(currentLanguage === 'en' ? 'Remove this worker from your list?' : 'ఈ కార్మికుడిని మీ జాబితా నుండి తొలగించాలా?')) {
+                const worker = workerProfiles.find(w => (w.id || w.userId) === workerId);
+                if (worker) {
+                    delete worker.agentId;
+                    delete worker.agentName;
+                    delete worker.agentPhone;
+                    localStorage.setItem('workerProfiles', JSON.stringify(workerProfiles));
+                    updateAgentStats();
+                    renderMyWorkers();
+                }
+            }
+        }
+
+        // Worker Allocation
+        function showAllocateModal(jobId) {
+            currentAllocatingJobId = jobId;
+            const job = workRequests.find(r => r.id === jobId);
+            const myWorkers = workerProfiles.filter(w => w.agentId === currentUser.id && w.isAvailable !== false);
+            const existingAllocations = jobAllocations.filter(a => a.jobId === jobId).map(a => a.workerId);
+            
+            document.getElementById('allocateJobDetails').textContent = `${job.category} - ${job.subcategory} (${getText('workersNeeded')}: ${job.numWorkers})`;
+            
+            const container = document.getElementById('availableWorkersForAllocation');
+            
+            if (myWorkers.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-center py-4">${getText('noWorkersMsg')}</p>`;
+            } else {
+                container.innerHTML = `
+                    <p class="font-semibold mb-3">${getText('selectWorkersToAllocate')}</p>
+                    ${myWorkers.map(w => `
+                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer ${existingAllocations.includes(w.id || w.userId) ? 'bg-green-50 border-green-300' : ''}">
+                            <input type="checkbox" name="allocateWorker" value="${w.id || w.userId}" 
+                                ${existingAllocations.includes(w.id || w.userId) ? 'checked' : ''}
+                                class="mr-3 w-5 h-5">
+                            <div class="flex-1">
+                                <p class="font-medium">${w.name}</p>
+                                <p class="text-sm text-gray-500">${w.phone} | ${w.village || ''}</p>
+                                ${w.skills ? `<p class="text-xs text-gray-400">${Array.isArray(w.skills) ? w.skills.slice(0, 3).join(', ') : w.skills}</p>` : ''}
+                            </div>
+                        </label>
+                    `).join('')}
+                `;
+            }
+            
+            document.getElementById('allocateWorkersModal').classList.remove('hidden');
+        }
+
+        function closeAllocateModal() {
+            document.getElementById('allocateWorkersModal').classList.add('hidden');
+            currentAllocatingJobId = null;
+        }
+
+        function confirmAllocation() {
+            const checkboxes = document.querySelectorAll('input[name="allocateWorker"]:checked');
+            const selectedWorkerIds = Array.from(checkboxes).map(cb => cb.value);
+            const job = workRequests.find(r => r.id === currentAllocatingJobId);
+            
+            // Remove existing allocations for this job
+            jobAllocations = jobAllocations.filter(a => a.jobId !== currentAllocatingJobId);
+            
+            // Reset availability for previously allocated workers
+            workerProfiles.forEach(w => {
+                if (w.agentId === currentUser.id) {
+                    w.isAvailable = true;
+                }
+            });
+            
+            // Add new allocations
+            selectedWorkerIds.forEach(workerId => {
+                jobAllocations.push({
+                    id: Date.now().toString() + workerId,
+                    jobId: currentAllocatingJobId,
+                    workerId: workerId,
+                    allocatedAt: new Date().toISOString()
+                });
+                
+                // Mark worker as busy
+                const worker = workerProfiles.find(w => (w.id || w.userId) === workerId);
+                if (worker) {
+                    worker.isAvailable = false;
+                    worker.currentJob = currentAllocatingJobId;
+                }
+            });
+            
+            localStorage.setItem('jobAllocations', JSON.stringify(jobAllocations));
+            localStorage.setItem('workerProfiles', JSON.stringify(workerProfiles));
+            
+            closeAllocateModal();
+            renderAgentAcceptedJobs();
+            renderMyWorkers();
+        }
+
+        function removeAllocation(jobId, workerId) {
+            jobAllocations = jobAllocations.filter(a => !(a.jobId === jobId && a.workerId === workerId));
+            
+            const worker = workerProfiles.find(w => (w.id || w.userId) === workerId);
+            if (worker) {
+                worker.isAvailable = true;
+                delete worker.currentJob;
+            }
+            
+            localStorage.setItem('jobAllocations', JSON.stringify(jobAllocations));
+            localStorage.setItem('workerProfiles', JSON.stringify(workerProfiles));
+            
+            renderAgentAcceptedJobs();
+            renderMyWorkers();
+        }
+
+        // Worker functions
+        function loadWorkerProfile() {
+            const profile = workerProfiles.find(p => p.userId === currentUser.id);
+            if (profile) {
+                document.getElementById('workerName').value = profile.name || currentUser.name;
+                document.getElementById('workerPhone').value = profile.phone || currentUser.phone;
+                document.getElementById('workerAge').value = profile.age || '';
+                document.getElementById('workerVillage').value = profile.village || currentUser.village || '';
+                document.getElementById('workerExperience').value = profile.experience || '';
+                
+                if (profile.skills && Array.isArray(profile.skills)) {
+                    const skillsSelect = document.getElementById('workerSkills');
+                    Array.from(skillsSelect.options).forEach(option => {
+                        option.selected = profile.skills.includes(option.value);
+                    });
+                }
+                
+                // Show agent info if assigned
+                if (profile.agentId) {
+                    document.getElementById('workerAgentInfo').classList.remove('hidden');
+                    document.getElementById('workerAgentName').textContent = profile.agentName;
+                    document.getElementById('workerAgentPhone').textContent = profile.agentPhone;
+                    document.getElementById('callAgentBtn').href = `tel:${profile.agentPhone}`;
+                }
+            }
+        }
+
+        function updateWorkerProfile(event) {
+            event.preventDefault();
+            
+            const skills = Array.from(document.getElementById('workerSkills').selectedOptions).map(o => o.value);
+            
+            let profile = workerProfiles.find(p => p.userId === currentUser.id);
+            if (!profile) {
+                profile = { userId: currentUser.id, id: Date.now().toString() };
+                workerProfiles.push(profile);
+            }
+            
+            profile.name = document.getElementById('workerName').value;
+            profile.phone = document.getElementById('workerPhone').value;
+            profile.age = document.getElementById('workerAge').value;
+            profile.village = document.getElementById('workerVillage').value;
+            profile.skills = skills;
+            profile.experience = document.getElementById('workerExperience').value;
+            profile.profileComplete = true;
+            
+            localStorage.setItem('workerProfiles', JSON.stringify(workerProfiles));
+            alert(getText('profileUpdated'));
+            updateWorkerStats();
+        }
+
+        function submitWorkerRequest(event) {
+            event.preventDefault();
+            
+            const profile = workerProfiles.find(p => p.userId === currentUser.id);
+            if (!profile || !profile.profileComplete) {
+                alert(currentLanguage === 'en' ? 'Please complete your profile first!' : 'దయచేసి మీ ప్రొఫైల్‌ను ముందుగా పూర్తి చేయండి!');
+                return;
+            }
+            
+            // Check for existing pending request
+            const existingRequest = workerRequests.find(r => r.workerId === currentUser.id && (r.status === 'pending' || r.status === 'approved'));
+            if (existingRequest) {
+                alert(currentLanguage === 'en' ? 'You already have an active request!' : 'మీకు ఇప్పటికే క్రియాశీల అభ్యర్థన ఉంది!');
+                return;
+            }
+            
+            const request = {
+                id: Date.now().toString(),
+                workerId: currentUser.id,
+                workerName: profile.name,
+                workerPhone: profile.phone,
+                preferredWork: document.getElementById('preferredWork').value,
+                availability: document.getElementById('availability').value,
+                expectedWage: document.getElementById('expectedWage').value,
+                notes: document.getElementById('workerNotes').value,
+                status: 'pending',
+                createdAt: new Date().toISOString()
+            };
+            
+            workerRequests.push(request);
+            localStorage.setItem('workerRequests', JSON.stringify(workerRequests));
+            
+            document.getElementById('workerRequestForm').reset();
+            alert(getText('requestSubmitted'));
+            updateWorkerStats();
+        }
+
+        function cancelWorkerRequest() {
+            const activeRequest = workerRequests.find(r => r.workerId === currentUser.id && r.status === 'pending');
+            if (activeRequest) {
+                workerRequests = workerRequests.filter(r => r.id !== activeRequest.id);
+                localStorage.setItem('workerRequests', JSON.stringify(workerRequests));
+                alert(getText('requestCancelled'));
+                updateWorkerStats();
+            }
+        }
+
+        function updateWorkerStats() {
+            const profile = workerProfiles.find(p => p.userId === currentUser.id);
+            const statusElement = document.getElementById('profileStatus');
+            
+            if (profile && profile.profileComplete) {
+                statusElement.textContent = getText('complete');
+                statusElement.classList.remove('text-blue-600');
+                statusElement.classList.add('text-green-600');
+            } else {
+                statusElement.textContent = getText('incomplete');
+                statusElement.classList.remove('text-green-600');
+                statusElement.classList.add('text-blue-600');
+            }
+            
+            // Jobs completed
+            if (profile) {
+                document.getElementById('jobsCompleted').textContent = profile.jobsCompleted || 0;
+            }
+            
+            showActiveWorkerRequest();
+        }
+
+        function showActiveWorkerRequest() {
+            const activeRequest = workerRequests.find(r => r.workerId === currentUser.id && (r.status === 'pending' || r.status === 'approved'));
+            const statusElement = document.getElementById('workRequestStatus');
+            const activeRequestDiv = document.getElementById('activeWorkerRequest');
+            const pendingCard = document.getElementById('pendingRequestCard');
+            const acceptedCard = document.getElementById('acceptedRequestCard');
+            const requestForm = document.getElementById('workerRequestForm');
+            
+            if (activeRequest) {
+                activeRequestDiv.classList.remove('hidden');
+                
+                if (activeRequest.status === 'approved') {
+                    statusElement.textContent = getText('accepted');
+                    statusElement.classList.remove('text-yellow-600', 'text-green-600');
+                    statusElement.classList.add('text-green-600');
+                    
+                    pendingCard.classList.add('hidden');
+                    acceptedCard.classList.remove('hidden');
+                    requestForm.classList.add('hidden');
+                    
+                    const profile = workerProfiles.find(p => p.userId === currentUser.id);
+                    const details = `${getText('preferredWorkLabel')}: ${activeRequest.preferredWork}<br>
+                                    ${getText('expectedWageLabel')}: ₹${activeRequest.expectedWage}`;
+                    document.getElementById('acceptedRequestDetails').innerHTML = details;
+                    
+                    if (profile && profile.agentName) {
+                        document.getElementById('acceptedByAgent').innerHTML = `${getText('agentLabel')}: ${profile.agentName} (${profile.agentPhone})`;
+                    }
+                } else {
+                    statusElement.textContent = getText('pending');
+                    statusElement.classList.remove('text-green-600');
+                    statusElement.classList.add('text-yellow-600');
+                    
+                    acceptedCard.classList.add('hidden');
+                    pendingCard.classList.remove('hidden');
+                    requestForm.classList.add('hidden');
+                    
+                    const details = `${getText('preferredWorkLabel')}: ${activeRequest.preferredWork}<br>
+                                    ${getText('availabilityLabel')}: ${getText(activeRequest.availability)}<br>
+                                    ${getText('expectedWageLabel')}: ₹${activeRequest.expectedWage}`;
+                    document.getElementById('pendingRequestDetails').innerHTML = details;
+                }
+            } else {
+                statusElement.textContent = getText('noActiveRequest');
+                statusElement.classList.remove('text-yellow-600');
+                statusElement.classList.add('text-green-600');
+                activeRequestDiv.classList.add('hidden');
+                requestForm.classList.remove('hidden');
+            }
+            
+            // Update agent info
+            const profile = workerProfiles.find(p => p.userId === currentUser.id);
+            if (profile && profile.agentId) {
+                document.getElementById('workerAgentInfo').classList.remove('hidden');
+                document.getElementById('workerAgentName').textContent = profile.agentName;
+                document.getElementById('workerAgentPhone').textContent = profile.agentPhone;
+                document.getElementById('callAgentBtn').href = `tel:${profile.agentPhone}`;
+            } else {
+                document.getElementById('workerAgentInfo').classList.add('hidden');
+            }
+        }
+
+        // Notification functions
+        async function addNotification(userId, message, type, referenceId) {
+            const notification = {
+                id: Date.now().toString() + Math.random(),
+                userId,
+                message,
+                type,
+                referenceId,
+                read: false,
+                createdAt: new Date().toISOString()
+            };
+            try {
+                if (useFirebase) {
+                    await FirebaseHelper.save(FirebaseHelper.notifications(), notification);
+                } else {
+                    notifications.push(notification);
+                    localStorage.setItem('notifications', JSON.stringify(notifications));
+                    updateNotificationBadge();
+                }
+            } catch (error) {
+                console.error('Error adding notification:', error);
+            }
+        }
+
+        function updateNotificationBadge() {
+            if (currentUser) {
+                const unreadCount = notifications.filter(n => n.userId === currentUser.id && !n.read).length;
+                const badge = document.getElementById('notificationBadge');
+                if (unreadCount > 0) {
+                    badge.textContent = unreadCount;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+        }
+
+        function showNotifications() {
+            const panel = document.getElementById('notificationPanel');
+            const list = document.getElementById('notificationsList');
+            
+            const userNotifications = notifications.filter(n => n.userId === currentUser.id).reverse().slice(0, 20);
+            
+            if (userNotifications.length === 0) {
+                list.innerHTML = `<p class="text-gray-500 text-center">${currentLanguage === 'en' ? 'No notifications' : 'నోటిఫికేషన్‌లు లేవు'}</p>`;
+            } else {
+                list.innerHTML = userNotifications.map(n => `
+                    <div class="mb-3 p-3 ${n.read ? 'bg-gray-50' : 'bg-blue-50'} rounded-lg border ${n.read ? 'border-gray-200' : 'border-blue-200'}">
+                        <p class="text-sm">${n.message}</p>
+                        <p class="text-xs text-gray-500 mt-1">${new Date(n.createdAt).toLocaleString()}</p>
+                    </div>
+                `).join('');
+            }
+            
+            // Mark all as read
+            notifications.forEach(n => {
+                if (n.userId === currentUser.id) {
+                    n.read = true;
+                }
+            });
+            localStorage.setItem('notifications', JSON.stringify(notifications));
+            updateNotificationBadge();
+            
+            panel.classList.toggle('hidden');
+        }
+
+        function closeNotifications() {
+            document.getElementById('notificationPanel').classList.add('hidden');
+        }
+
+        // Close modals on outside click
+        document.addEventListener('click', function(e) {
+            if (e.target.id === 'authModal') closeAuthModal();
+            if (e.target.id === 'addWorkerModal') closeAddWorkerModal();
+            if (e.target.id === 'allocateWorkersModal') closeAllocateModal();
+        });
+
+        // Initialize
+        window.onload = function() {
+            document.getElementById('languageModal').classList.remove('hidden');
+        };
+    </script>
+</body>
+</html>
